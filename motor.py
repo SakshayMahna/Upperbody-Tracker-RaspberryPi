@@ -1,7 +1,8 @@
 from threading import Thread, Lock, Event
 import time
 from datetime import datetime
-import pigpio
+import RPi.GPIO as GPIO
+from time import sleep
 
 time_cycle = 80
 
@@ -24,11 +25,15 @@ class ThreadPublisher(Thread):
                 time.sleep((time_cycle - ms) / 1000.0)
 
 class Motor:
-    def __init__(self):
+    def __init__(self, pin):
         self.current_angle = 90
-        self.pi = pigpio.pi()
-        self.pi.set_mode(4, pigpio.OUTPUT)
-        self.pi.set_servo_pulsewidth(4, 1500)
+
+        self.pin = pin
+        GPIO.setmode(GPIO.BOARD)
+        GPIO.setup(pin, GPIO.OUT)
+        
+        self.pwm = GPIO.pwm(pin, 50)
+        self.pwm.start(0)
 
         self.lock = Lock()
         self.kill_event = Event()
@@ -41,7 +46,13 @@ class Motor:
         self.lock.acquire()
         signal = self.data
         self.lock.release()
-        self.pi.set_servo_pulsewidth(4, signal)
+
+        GPIO.output(self.pin, True)
+        self.pwm.ChangeDutyCycle(signal)
+        sleep(1)
+        GPIO.output(self.pin, False)
+        self.pwm.ChangeDutyCycle(signal)
+
 
     def stop(self):
         self.kill_event.set()
@@ -49,7 +60,7 @@ class Motor:
     def start(self):
         self.kill_event.clear()
 
-    def send_command(self, signal):
+    def send_command(self, angle):
         self.lock.acquire()
-        self.data = signal
+        self.data = angle / 18 + 2
         self.lock.release()
